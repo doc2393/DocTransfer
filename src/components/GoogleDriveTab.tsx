@@ -151,7 +151,7 @@ const GoogleDriveTab: React.FC<GoogleDriveTabProps> = ({ onDocumentUploaded }) =
                     <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#111827', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <LinkIcon size={24} style={{ color: '#4285f4' }} /> Google Drive Link Wrapper
                     </h2>
-                    <p style={{ color: '#6b7280', fontSize: '0.95rem' }}>Wrap your Google Drive links with security features</p>
+                    <p style={{ color: '#6b7280', fontSize: '0.95rem' }}>Upto 2TB file Transfer using Google Drive share link.</p>
                 </div>
 
                 {/* Instructions */}

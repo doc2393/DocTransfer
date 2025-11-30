@@ -108,7 +108,7 @@ const uploadFileResumable = async (
     }
 
     // Step 2: Upload file in chunks
-    return uploadInChunks(uploadUrl, file, token, onProgress);
+    return uploadInChunks(uploadUrl, file, onProgress);
 };
 
 /**
@@ -117,7 +117,6 @@ const uploadFileResumable = async (
 const uploadInChunks = async (
     uploadUrl: string,
     file: File,
-    token: string,
     onProgress?: (progress: number) => void
 ): Promise<UploadResult> => {
     const chunkSize = 5 * 1024 * 1024; // 5MB chunks
