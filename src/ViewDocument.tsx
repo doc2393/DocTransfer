@@ -9,6 +9,8 @@ interface DocumentData {
     file_path: string;
     file_size: number;
     file_type: string;
+    storage_type?: string;
+    google_drive_link?: string;
     password?: string;
     allow_download: boolean;
     expires_at?: string;
@@ -127,6 +129,14 @@ const ViewDocument: React.FC = () => {
         setDownloading(true);
 
         try {
+            // Check if it's a Google Drive link
+            if (document.storage_type === 'google_drive' && document.google_drive_link) {
+                // Redirect to Google Drive
+                window.location.href = document.google_drive_link;
+                return;
+            }
+
+            // Handle Supabase storage download
             const { data, error } = await supabase.storage
                 .from('documents')
                 .download(document.file_path);
@@ -213,7 +223,11 @@ const ViewDocument: React.FC = () => {
                     </div>
                     <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#111827', marginBottom: '0.5rem' }}>{document.name}</h1>
                     <p style={{ color: '#6b7280', fontSize: '0.95rem' }}>
-                        {(document.file_size / 1024 / 1024).toFixed(2)} MB • {document.file_type.split('/')[1]?.toUpperCase() || 'FILE'}
+                        {document.storage_type === 'google_drive' ? (
+                            <>{document.file_type}</>
+                        ) : (
+                            <>{(document.file_size / 1024 / 1024).toFixed(2)} MB • {document.file_type.split('/')[1]?.toUpperCase() || 'FILE'}</>
+                        )}
                     </p>
                 </div>
 
@@ -312,9 +326,10 @@ const ViewDocument: React.FC = () => {
                                 className="btn-primary"
                                 style={{ width: '100%', padding: '1rem', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', transition: 'all 0.2s' }}
                             >
-                                {downloading ? 'Downloading...' : (
+                                {downloading ? 'Opening...' : (
                                     <>
-                                        <Download size={24} /> Download File
+                                        <Download size={24} />
+                                        {document.storage_type === 'google_drive' ? 'Open in Google Drive' : 'Download File'}
                                     </>
                                 )}
                             </button>
