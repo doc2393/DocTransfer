@@ -30,7 +30,7 @@ const LandingPage: React.FC = () => {
   const faqs = [
     {
       question: "How secure is my data?",
-      answer: "We use military-grade AES-256 encryption for all files at rest and in transit. Your documents are protected by the same security standards used by banks and government agencies."
+      answer: "Your files are protected with enterprise-grade security. All data is encrypted in transit with HTTPS/TLS and stored securely in Supabase's encrypted storage. We implement password protection, email verification, and granular access controls to keep your documents safe."
     },
     {
       question: "Can I track who views my documents?",
@@ -175,7 +175,7 @@ const LandingPage: React.FC = () => {
             <div className="security-badges">
               <div className="security-badge">
                 <Lock size={16} />
-                <span>AES-256 Encrypted</span>
+                <span>Encrypted Storage</span>
               </div>
               <div className="security-badge">
                 <Shield size={16} />
@@ -191,8 +191,8 @@ const LandingPage: React.FC = () => {
 
         {/* Security Section */}
         <section className="security-section" id="security">
-          <span className="section-badge">Military-Grade Security</span>
-          <h2>Military-Grade Security for Your Files</h2>
+          <span className="section-badge">Enterprise-Grade Security</span>
+          <h2>Enterprise-Grade Security for Your Files</h2>
           <p style={{ maxWidth: '600px', margin: '1rem auto', color: '#6b7280' }}>
             We take security seriously. Your data is encrypted and protected at every step.
           </p>
@@ -204,14 +204,14 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
             <div className="security-details">
-              <h3>AES-256 Encryption Standard</h3>
+              <h3>Secure Cloud Storage</h3>
               <p style={{ marginBottom: '2rem', color: '#6b7280' }}>
-                Your files are encrypted using the industry-standard AES-256 algorithm, ensuring that only authorized users can access your data.
+                Your files are stored securely in Supabase's encrypted cloud storage with enterprise-grade protection. All data transfers use HTTPS/TLS encryption to ensure your documents remain safe.
               </p>
               <ul className="security-list">
                 <li>
                   <CheckCircle className="check-icon" size={24} />
-                  <span>End-to-end encryption for all transfers</span>
+                  <span>HTTPS/TLS encryption for all data transfers</span>
                 </li>
                 <li>
                   <CheckCircle className="check-icon" size={24} />
@@ -244,7 +244,7 @@ const LandingPage: React.FC = () => {
               </div>
               <h3>Password Protection</h3>
               <p>Secure files with password-protected links. Add an extra layer of security ensuring only authorized recipients can access your sensitive documents.</p>
-              <div className="feature-highlight">🔐 Military-grade encryption</div>
+              <div className="feature-highlight">🔐 Secure password protection</div>
             </div>
 
             <div className="feature-card premium-card">
@@ -346,7 +346,7 @@ const LandingPage: React.FC = () => {
                 <Lock size={32} />
               </div>
               <h3>Password Protection</h3>
-              <p>Secure your files with military-grade encryption</p>
+              <p>Secure your files with password protection</p>
             </div>
 
             {/* Feature Wave 2 */}
