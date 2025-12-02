@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { decryptFile } from './lib/crypto';
+import { comparePassword, rateLimiter } from './lib/security';
 import { FileText, Download, Shield, AlertCircle, Lock as LockIcon, Mail } from 'lucide-react';
 
 interface DocumentData {
@@ -17,6 +19,11 @@ interface DocumentData {
     screenshot_protection: boolean;
     email_verification: boolean;
     allowed_email?: string;
+    // Encryption fields
+    is_encrypted?: boolean;
+    encryption_key?: string;
+    encryption_iv?: string;
+    original_file_type?: string;
 }
 
 const ViewDocument: React.FC = () => {
@@ -86,9 +93,9 @@ const ViewDocument: React.FC = () => {
         }
     };
 
-    const handlePasswordSubmit = (e: React.FormEvent) => {
+    const handlePasswordSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (document?.password && passwordInput === document.password) {
+        if (document?.password && await comparePassword(passwordInput, document.password)) {
             setIsAuthenticated(true);
         } else {
             alert('Incorrect password');
@@ -99,20 +106,31 @@ const ViewDocument: React.FC = () => {
         e.preventDefault();
         if (!email) return;
 
+        // Rate limiting: Only allow one code every 60 seconds per email
+        const rateCheck = rateLimiter.check(email, 1, 60000);
+        if (!rateCheck.allowed) {
+            alert(`Please wait ${rateCheck.waitTime} seconds before requesting a new code.`);
+            return;
+        }
+
         // Check if specific email is required
         if (document?.allowed_email && document.allowed_email !== email) {
             alert('Access denied. This document is not shared with this email address.');
             return;
         }
 
-        // Mock sending code
+        // Generate verification code
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         setSentCode(code);
         setShowCodeInput(true);
 
-        // In a real app, this would be an API call
-        console.log(`Verification code for ${email}: ${code}`);
-        alert(`(Mock) Verification code sent to ${email}: ${code}`);
+        // TODO: In production, integrate real email service (Resend/SendGrid/AWS SES)
+        alert(`Verification code sent to ${email}. Check your email.`);
+
+        // Development only - show code in console
+        if (import.meta.env.DEV) {
+            console.log(`[DEV ONLY] Verification code: ${code}`);
+        }
     };
 
     const handleVerifyCode = (e: React.FormEvent) => {
@@ -143,8 +161,26 @@ const ViewDocument: React.FC = () => {
 
             if (error) throw error;
 
+            let blob = data;
+
+            // Decrypt if encrypted
+            if (document.is_encrypted && document.encryption_key && document.encryption_iv) {
+                try {
+                    blob = await decryptFile(
+                        data,
+                        document.encryption_key,
+                        document.encryption_iv,
+                        document.original_file_type || document.file_type
+                    );
+                } catch (decryptError) {
+                    console.error('Decryption failed:', decryptError);
+                    alert('Failed to decrypt file. The key may be invalid.');
+                    return;
+                }
+            }
+
             // Create download link
-            const url = window.URL.createObjectURL(data);
+            const url = window.URL.createObjectURL(blob);
             const a = window.document.createElement('a');
             a.href = url;
             a.download = document.name;

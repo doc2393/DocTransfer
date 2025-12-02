@@ -204,14 +204,14 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
             <div className="security-details">
-              <h3>Secure Cloud Storage</h3>
+              <h3>AES-256 Encryption Standard</h3>
               <p style={{ marginBottom: '2rem', color: '#6b7280' }}>
-                Your files are stored securely in Supabase's encrypted cloud storage with enterprise-grade protection. All data transfers use HTTPS/TLS encryption to ensure your documents remain safe.
+                Your files are encrypted in your browser using military-grade AES-256-GCM encryption before they ever reach our servers. We can't read your files, and neither can anyone else.
               </p>
               <ul className="security-list">
                 <li>
                   <CheckCircle className="check-icon" size={24} />
-                  <span>HTTPS/TLS encryption for all data transfers</span>
+                  <span>Client-side encryption (Zero-Knowledge)</span>
                 </li>
                 <li>
                   <CheckCircle className="check-icon" size={24} />

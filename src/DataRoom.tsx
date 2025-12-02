@@ -21,6 +21,8 @@ import {
     UserPlus
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import { encryptFile } from './lib/crypto';
+import { hashPassword } from './lib/security';
 import GoogleDriveTab from './components/GoogleDriveTab';
 
 interface Document {
@@ -152,18 +154,29 @@ const DataRoom: React.FC = () => {
         setUploadError(null);
 
         try {
+            // 1. Encrypt file before upload
+            const { encryptedBlob, key, iv } = await encryptFile(selectedFile);
+
+            // 2. Upload encrypted file to Supabase Storage
             const fileExt = selectedFile.name.split('.').pop();
             const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
             const filePath = `uploads/${fileName}`;
 
             const { error: uploadError } = await supabase.storage
                 .from('documents')
-                .upload(filePath, selectedFile);
+                .upload(filePath, encryptedBlob);
 
             if (uploadError) throw uploadError;
 
+            // 3. Create public URL (for the encrypted file)
+            // Note: This URL will serve the encrypted content. The client must decrypt it.
+            // const { data: { publicUrl } } = supabase.storage
+            //    .from('documents')
+            //    .getPublicUrl(filePath);
+
             const shareLink = Math.random().toString(36).substring(2, 12);
 
+            // 4. Save document metadata to database with encryption details
             const { data: docData, error: dbError } = await supabase
                 .from('documents')
                 .insert({
@@ -173,12 +186,18 @@ const DataRoom: React.FC = () => {
                     file_type: selectedFile.type,
                     share_link: shareLink,
                     allow_download: allowDownloads,
-                    password: passwordProtection ? password : null,
+                    password: passwordProtection ? await hashPassword(password) : null,
                     expires_at: linkExpiration ? expiresAt : null,
                     custom_domain: null,
                     screenshot_protection: screenshotProtection,
                     email_verification: emailVerification,
-                    allowed_email: emailVerification ? allowedEmail : null
+                    allowed_email: emailVerification ? allowedEmail : null,
+                    // Encryption metadata
+                    encryption_key: key,
+                    encryption_iv: iv,
+                    is_encrypted: true,
+                    original_file_name: selectedFile.name,
+                    original_file_type: selectedFile.type
                 })
                 .select()
                 .single();
