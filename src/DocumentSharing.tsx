@@ -18,8 +18,8 @@ import {
     Mail
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '@clerk/clerk-react';
-import { supabase, createClerkSupabaseClient } from './lib/supabase';
+import { useAuth, UserButton } from '@clerk/clerk-react';
+import { createClerkSupabaseClient } from './lib/supabase';
 
 interface Document {
     id: string;
@@ -194,6 +194,9 @@ const DocumentSharing: React.FC = () => {
                         <ArrowLeft size={20} /> Back to Dashboard
                     </Link>
                     <h1 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#1e293b' }}>Document Sharing</h1>
+                    <div style={{ marginLeft: 'auto' }}>
+                        <UserButton />
+                    </div>
                 </div>
             </header>
 

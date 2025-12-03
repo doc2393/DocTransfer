@@ -20,7 +20,7 @@ import {
     PenTool,
     UserPlus
 } from 'lucide-react';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth, UserButton } from '@clerk/clerk-react';
 import { supabase, createClerkSupabaseClient } from './lib/supabase';
 import { encryptFile } from './lib/crypto';
 import { hashPassword } from './lib/security';
@@ -84,9 +84,62 @@ const DataRoom: React.FC = () => {
         }
     }, [selectedFile]);
 
+    const [stats, setStats] = useState({
+        totalViews: 0,
+        uniqueViewers: 0,
+        avgViewTime: 0
+    });
+
     useEffect(() => {
         fetchDocuments();
+        fetchStats();
     }, []);
+
+    const fetchStats = async () => {
+        try {
+            const token = await getToken({ template: 'supabase' });
+            const authenticatedSupabase = createClerkSupabaseClient(token || '');
+
+            const { data, error } = await authenticatedSupabase
+                .from('document_stats')
+                .select('*');
+
+            if (error) throw error;
+
+            if (data) {
+                const totalViews = data.reduce((acc, curr) => acc + (curr.total_views || 0), 0);
+                const uniqueViewers = data.reduce((acc, curr) => acc + (curr.unique_viewers || 0), 0);
+
+                // Calculate weighted average for view time
+                let totalDuration = 0;
+                let totalDocsWithViews = 0;
+
+                data.forEach(doc => {
+                    if (doc.total_views > 0) {
+                        totalDuration += (doc.avg_view_time_seconds || 0) * doc.total_views;
+                        totalDocsWithViews += doc.total_views;
+                    }
+                });
+
+                const avgViewTime = totalDocsWithViews > 0 ? Math.round(totalDuration / totalDocsWithViews) : 0;
+
+                setStats({
+                    totalViews,
+                    uniqueViewers,
+                    avgViewTime
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+        }
+    };
+
+    const formatDuration = (seconds: number) => {
+        if (seconds < 60) return `${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}m ${remainingSeconds}s`;
+    };
 
     const fetchDocuments = async () => {
         try {
@@ -274,7 +327,8 @@ const DataRoom: React.FC = () => {
                             <h1 style={{ fontSize: '1.75rem', fontWeight: '700', color: '#4f46e5', marginBottom: '0.5rem' }}>DocTransfer Dashboard</h1>
                             <p style={{ fontSize: '0.95rem', color: '#6b7280' }}>Welcome back! Here's what's happening.</p>
                         </div>
-                        <div style={{ display: 'flex', gap: '1rem' }}>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            <UserButton />
                             <button style={{ padding: '0.625rem 1.25rem', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', color: '#374151', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                                 <UserPlus size={18} />
                                 Team
@@ -312,7 +366,7 @@ const DataRoom: React.FC = () => {
                                     <TrendingUp size={16} /> 24%
                                 </span>
                             </div>
-                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>1,247</div>
+                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>{stats.totalViews}</div>
                             <div style={{ color: '#6b7280', fontSize: '0.95rem', fontWeight: '500' }}>Total Views</div>
                         </div>
 
@@ -326,7 +380,7 @@ const DataRoom: React.FC = () => {
                                     <TrendingUp size={16} /> 18%
                                 </span>
                             </div>
-                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>623</div>
+                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>{stats.uniqueViewers}</div>
                             <div style={{ color: '#6b7280', fontSize: '0.95rem', fontWeight: '500' }}>Unique Viewers</div>
                         </div>
 
@@ -340,7 +394,7 @@ const DataRoom: React.FC = () => {
                                     <TrendingDown size={16} /> 5%
                                 </span>
                             </div>
-                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>5m 42s</div>
+                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>{formatDuration(stats.avgViewTime)}</div>
                             <div style={{ color: '#6b7280', fontSize: '0.95rem', fontWeight: '500' }}>Avg. View Time</div>
                         </div>
                     </div>

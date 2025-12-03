@@ -58,6 +58,9 @@ const ViewDocument: React.FC = () => {
 
             setDocument(data);
 
+            // Track View
+            trackView(data.id);
+
             // Check for expiration
             if (data.expires_at) {
                 const expirationDate = new Date(data.expires_at);
@@ -90,6 +93,52 @@ const ViewDocument: React.FC = () => {
             setError('Document not found or link expired.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const trackView = async (documentId: string) => {
+        try {
+            // Get or create viewer ID
+            let viewerId = localStorage.getItem('doc_viewer_id');
+            if (!viewerId) {
+                viewerId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+                localStorage.setItem('doc_viewer_id', viewerId);
+            }
+
+            // Insert view record
+            const { data: viewData, error } = await supabase
+                .from('document_views')
+                .insert({
+                    document_id: documentId,
+                    viewer_id: viewerId,
+                    user_agent: navigator.userAgent
+                })
+                .select()
+                .single();
+
+            if (!error && viewData) {
+                // Set up duration tracking
+                const startTime = Date.now();
+                const updateDuration = () => {
+                    const duration = Math.round((Date.now() - startTime) / 1000);
+                    if (duration > 0) {
+                        supabase
+                            .from('document_views')
+                            .update({ duration_seconds: duration })
+                            .eq('id', viewData.id)
+                            .then(() => { }); // Fire and forget
+                    }
+                };
+
+                // Update on unmount or page hide
+                window.addEventListener('beforeunload', updateDuration);
+                return () => {
+                    window.removeEventListener('beforeunload', updateDuration);
+                    updateDuration();
+                };
+            }
+        } catch (err) {
+            console.error('Error tracking view:', err);
         }
     };
 

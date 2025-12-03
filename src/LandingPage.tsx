@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useUser, useClerk } from '@clerk/clerk-react';
+import { Link } from 'react-router-dom';
+import { useAuth, UserButton } from '@clerk/clerk-react';
 import {
   Shield,
   FileText,
@@ -23,9 +23,7 @@ import {
 
 const LandingPage: React.FC = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const { isSignedIn, user } = useUser();
-  const { signOut } = useClerk();
-  const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -97,18 +95,10 @@ const LandingPage: React.FC = () => {
           </div>
           {isSignedIn ? (
             <>
-              <span style={{ color: '#6b7280', marginRight: '1rem', fontSize: '0.9rem' }}>
-                {user?.firstName || user?.emailAddresses[0].emailAddress}
-              </span>
               <Link to="/dataroom">
-                <button className="btn-primary">Dashboard</button>
+                <button className="btn-primary" style={{ marginRight: '1rem' }}>Dashboard</button>
               </Link>
-              <button
-                className="btn-secondary"
-                onClick={() => signOut(() => navigate('/'))}
-              >
-                Sign Out
-              </button>
+              <UserButton />
             </>
           ) : (
             <>
@@ -486,7 +476,7 @@ const LandingPage: React.FC = () => {
           &copy; 2025 DocTransfer. All rights reserved.
         </div>
       </footer>
-    </div>
+    </div >
   );
 };
 
