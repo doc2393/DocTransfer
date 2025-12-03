@@ -18,7 +18,8 @@ import {
     Mail
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from './lib/supabase';
+import { useAuth } from '@clerk/clerk-react';
+import { supabase, createClerkSupabaseClient } from './lib/supabase';
 
 interface Document {
     id: string;
@@ -40,6 +41,7 @@ interface Document {
 }
 
 const DocumentSharing: React.FC = () => {
+    const { getToken } = useAuth();
     const [documents, setDocuments] = useState<Document[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -65,7 +67,10 @@ const DocumentSharing: React.FC = () => {
     }, []);
 
     const fetchDocuments = async () => {
-        const { data } = await supabase
+        const token = await getToken({ template: 'supabase' });
+        const authenticatedSupabase = createClerkSupabaseClient(token || '');
+
+        const { data } = await authenticatedSupabase
             .from('documents')
             .select('*')
             .order('created_at', { ascending: false });
@@ -112,11 +117,14 @@ const DocumentSharing: React.FC = () => {
         setUploadError(null);
 
         try {
+            const token = await getToken({ template: 'supabase' });
+            const authenticatedSupabase = createClerkSupabaseClient(token || '');
+
             const fileExt = uploadedFile.name.split('.').pop();
             const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
             const filePath = `uploads/${fileName}`;
 
-            const { error: uploadError } = await supabase.storage
+            const { error: uploadError } = await authenticatedSupabase.storage
                 .from('documents')
                 .upload(filePath, uploadedFile);
 
@@ -124,7 +132,7 @@ const DocumentSharing: React.FC = () => {
 
             const shareLink = Math.random().toString(36).substring(2, 12);
 
-            const { error: dbError } = await supabase
+            const { error: dbError } = await authenticatedSupabase
                 .from('documents')
                 .insert({
                     name: uploadedFile.name,
@@ -170,8 +178,11 @@ const DocumentSharing: React.FC = () => {
         const doc = documents.find(d => d.id === id);
         if (!doc) return;
 
-        await supabase.storage.from('documents').remove([doc.file_path]);
-        await supabase.from('documents').delete().eq('id', id);
+        const token = await getToken({ template: 'supabase' });
+        const authenticatedSupabase = createClerkSupabaseClient(token || '');
+
+        await authenticatedSupabase.storage.from('documents').remove([doc.file_path]);
+        await authenticatedSupabase.from('documents').delete().eq('id', id);
         setDocuments(documents.filter(d => d.id !== id));
     };
 

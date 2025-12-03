@@ -20,7 +20,8 @@ import {
     PenTool,
     UserPlus
 } from 'lucide-react';
-import { supabase } from './lib/supabase';
+import { useAuth } from '@clerk/clerk-react';
+import { supabase, createClerkSupabaseClient } from './lib/supabase';
 import { encryptFile } from './lib/crypto';
 import { hashPassword } from './lib/security';
 import GoogleDriveTab from './components/GoogleDriveTab';
@@ -42,6 +43,7 @@ interface Document {
 }
 
 const DataRoom: React.FC = () => {
+    const { getToken } = useAuth();
     const [documents, setDocuments] = useState<Document[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const [activeTab, setActiveTab] = useState<'upload' | 'google-drive' | 'documents' | 'analytics' | 'settings'>('upload');
@@ -88,7 +90,10 @@ const DataRoom: React.FC = () => {
 
     const fetchDocuments = async () => {
         try {
-            const { data, error } = await supabase
+            const token = await getToken({ template: 'supabase' });
+            const authenticatedSupabase = createClerkSupabaseClient(token || '');
+
+            const { data, error } = await authenticatedSupabase
                 .from('documents')
                 .select('*')
                 .order('created_at', { ascending: false });
@@ -162,7 +167,10 @@ const DataRoom: React.FC = () => {
             const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
             const filePath = `uploads/${fileName}`;
 
-            const { error: uploadError } = await supabase.storage
+            const token = await getToken({ template: 'supabase' });
+            const authenticatedSupabase = createClerkSupabaseClient(token || '');
+
+            const { error: uploadError } = await authenticatedSupabase.storage
                 .from('documents')
                 .upload(filePath, encryptedBlob);
 
@@ -177,7 +185,7 @@ const DataRoom: React.FC = () => {
             const shareLink = Math.random().toString(36).substring(2, 12);
 
             // 4. Save document metadata to database with encryption details
-            const { data: docData, error: dbError } = await supabase
+            const { data: docData, error: dbError } = await authenticatedSupabase
                 .from('documents')
                 .insert({
                     name: selectedFile.name,

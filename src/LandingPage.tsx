@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useUser, useClerk } from '@clerk/clerk-react';
 import {
   Shield,
   FileText,
@@ -22,6 +23,9 @@ import {
 
 const LandingPage: React.FC = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const { isSignedIn, user } = useUser();
+  const { signOut } = useClerk();
+  const navigate = useNavigate();
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -91,10 +95,31 @@ const LandingPage: React.FC = () => {
             <a href="#pricing">Pricing</a>
             <a href="#security">Security</a>
           </div>
-          <button className="btn-secondary">Log In</button>
-          <Link to="/dataroom">
-            <button className="btn-primary">Get Started</button>
-          </Link>
+          {isSignedIn ? (
+            <>
+              <span style={{ color: '#6b7280', marginRight: '1rem', fontSize: '0.9rem' }}>
+                {user?.firstName || user?.emailAddresses[0].emailAddress}
+              </span>
+              <Link to="/dataroom">
+                <button className="btn-primary">Dashboard</button>
+              </Link>
+              <button
+                className="btn-secondary"
+                onClick={() => signOut(() => navigate('/'))}
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <>
+              <Link to="/sign-in">
+                <button className="btn-secondary">Sign In</button>
+              </Link>
+              <Link to="/sign-up">
+                <button className="btn-primary">Get Started</button>
+              </Link>
+            </>
+          )}
         </nav>
       </header>
 
