@@ -42,6 +42,13 @@ const ViewDocument: React.FC = () => {
     const [isEmailVerified, setIsEmailVerified] = useState(false);
     const [showCodeInput, setShowCodeInput] = useState(false);
 
+    // Branding State
+    const [branding, setBranding] = useState<{
+        logo_url?: string;
+        brand_color?: string;
+        site_url?: string;
+    } | null>(null);
+
     useEffect(() => {
         fetchDocument();
     }, [shareLink]);
@@ -57,6 +64,16 @@ const ViewDocument: React.FC = () => {
             if (error) throw error;
 
             setDocument(data);
+
+            // Fetch branding settings
+            if (data.user_id) {
+                const { data: brandingData } = await supabase
+                    .from('branding_settings')
+                    .select('logo_url, brand_color, site_url')
+                    .eq('user_id', data.user_id)
+                    .single();
+                if (brandingData) setBranding(brandingData);
+            }
 
             // Track View
             trackView(data.id);
@@ -300,132 +317,157 @@ const ViewDocument: React.FC = () => {
                     backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' version=\'1.1\' height=\'100px\' width=\'100px\'><text transform=\'translate(20, 100) rotate(-45)\' fill=\'rgba(0,0,0,0.05)\' font-size=\'20\'>Protected View</text></svg>")'
                 }} />
             )}
-            <div style={{ width: '100%', maxWidth: '480px', background: 'white', borderRadius: '24px', padding: '2.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
 
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                    <div style={{ width: '80px', height: '80px', background: '#e0e7ff', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', color: '#4f46e5' }}>
-                        <FileText size={40} />
-                    </div>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#111827', marginBottom: '0.5rem' }}>{document.name}</h1>
-                    <p style={{ color: '#6b7280', fontSize: '0.95rem' }}>
-                        {document.storage_type === 'google_drive' ? (
-                            <>{document.file_type}</>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '480px' }}>
+                {branding?.logo_url && (
+                    <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
+                        {branding.site_url ? (
+                            <a href={branding.site_url} target="_blank" rel="noopener noreferrer">
+                                <img src={branding.logo_url} alt="Company Logo" style={{ height: '60px', objectFit: 'contain' }} />
+                            </a>
                         ) : (
-                            <>{(document.file_size / 1024 / 1024).toFixed(2)} MB • {document.file_type.split('/')[1]?.toUpperCase() || 'FILE'}</>
+                            <img src={branding.logo_url} alt="Company Logo" style={{ height: '60px', objectFit: 'contain' }} />
                         )}
-                    </p>
-                </div>
-
-                {showPasswordScreen && (
-                    <form onSubmit={handlePasswordSubmit}>
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
-                                This file is password protected
-                            </label>
-                            <div style={{ position: 'relative' }}>
-                                <LockIcon style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} size={18} />
-                                <input
-                                    type="password"
-                                    value={passwordInput}
-                                    onChange={(e) => setPasswordInput(e.target.value)}
-                                    placeholder="Enter password"
-                                    style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', border: '1px solid #d1d5db', borderRadius: '12px', outline: 'none', fontSize: '1rem' }}
-                                    autoFocus
-                                />
-                            </div>
-                        </div>
-                        <button type="submit" className="btn-primary" style={{ width: '100%', padding: '0.875rem', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1rem' }}>
-                            Unlock File
-                        </button>
-                    </form>
+                    </div>
                 )}
 
-                {showEmailScreen && (
-                    <div>
-                        {!showCodeInput ? (
-                            <form onSubmit={handleSendCode}>
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
-                                        Email Verification Required
-                                    </label>
-                                    <div style={{ position: 'relative' }}>
-                                        <Mail style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} size={18} />
-                                        <input
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            placeholder="Enter your email"
-                                            required
-                                            style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', border: '1px solid #d1d5db', borderRadius: '12px', outline: 'none', fontSize: '1rem' }}
-                                        />
-                                    </div>
-                                </div>
-                                <button type="submit" className="btn-primary" style={{ width: '100%', padding: '0.875rem', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1rem' }}>
-                                    Send Verification Code
-                                </button>
-                            </form>
-                        ) : (
-                            <form onSubmit={handleVerifyCode}>
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
-                                        Enter Verification Code
-                                    </label>
-                                    <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1rem' }}>
-                                        Code sent to {email}
-                                    </p>
+                <div style={{ width: '100%', background: 'white', borderRadius: '24px', padding: '2.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+
+                    <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                        <div style={{
+                            width: '80px',
+                            height: '80px',
+                            background: branding?.brand_color ? `${branding.brand_color}20` : '#e0e7ff',
+                            borderRadius: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            margin: '0 auto 1.5rem',
+                            color: branding?.brand_color || '#4f46e5'
+                        }}>
+                            <FileText size={40} />
+                        </div>
+                        <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#111827', marginBottom: '0.5rem' }}>{document.name}</h1>
+                        <p style={{ color: '#6b7280', fontSize: '0.95rem' }}>
+                            {document.storage_type === 'google_drive' ? (
+                                <>{document.file_type}</>
+                            ) : (
+                                <>{(document.file_size / 1024 / 1024).toFixed(2)} MB • {document.file_type.split('/')[1]?.toUpperCase() || 'FILE'}</>
+                            )}
+                        </p>
+                    </div>
+
+                    {showPasswordScreen && (
+                        <form onSubmit={handlePasswordSubmit}>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
+                                    This file is password protected
+                                </label>
+                                <div style={{ position: 'relative' }}>
+                                    <LockIcon style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} size={18} />
                                     <input
-                                        type="text"
-                                        value={verificationCode}
-                                        onChange={(e) => setVerificationCode(e.target.value)}
-                                        placeholder="000000"
-                                        maxLength={6}
-                                        style={{ width: '100%', padding: '0.75rem 1rem', border: '1px solid #d1d5db', borderRadius: '12px', outline: 'none', fontSize: '1.25rem', letterSpacing: '0.25rem', textAlign: 'center' }}
+                                        type="password"
+                                        value={passwordInput}
+                                        onChange={(e) => setPasswordInput(e.target.value)}
+                                        placeholder="Enter password"
+                                        style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', border: '1px solid #d1d5db', borderRadius: '12px', outline: 'none', fontSize: '1rem' }}
+                                        autoFocus
                                     />
                                 </div>
-                                <button type="submit" className="btn-primary" style={{ width: '100%', padding: '0.875rem', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1rem' }}>
-                                    Verify & Access
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowCodeInput(false)}
-                                    style={{ width: '100%', marginTop: '1rem', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.9rem' }}
-                                >
-                                    Change Email
-                                </button>
-                            </form>
-                        )}
-                    </div>
-                )}
-
-                {showContent && (
-                    <div className="animate-fade-in">
-                        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '1rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <Shield size={20} color="#16a34a" />
-                            <span style={{ color: '#15803d', fontSize: '0.9rem', fontWeight: '500' }}>File is secure and ready to download</span>
-                        </div>
-
-                        {document.allow_download ? (
-                            <button
-                                onClick={handleDownload}
-                                disabled={downloading}
-                                className="btn-primary"
-                                style={{ width: '100%', padding: '1rem', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', transition: 'all 0.2s' }}
-                            >
-                                {downloading ? 'Opening...' : (
-                                    <>
-                                        <Download size={24} />
-                                        {document.storage_type === 'google_drive' ? 'Open in Google Drive' : 'Download File'}
-                                    </>
-                                )}
-                            </button>
-                        ) : (
-                            <div style={{ textAlign: 'center', padding: '1rem', background: '#fef2f2', borderRadius: '12px', color: '#dc2626' }}>
-                                <AlertCircle size={24} style={{ marginBottom: '0.5rem' }} />
-                                <p>Downloads are disabled for this file.</p>
                             </div>
-                        )}
-                    </div>
-                )}
+                            <button type="submit" className="btn-primary" style={{ width: '100%', padding: '0.875rem', background: branding?.brand_color || '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1rem' }}>
+                                Unlock File
+                            </button>
+                        </form>
+                    )}
+
+                    {showEmailScreen && (
+                        <div>
+                            {!showCodeInput ? (
+                                <form onSubmit={handleSendCode}>
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
+                                            Email Verification Required
+                                        </label>
+                                        <div style={{ position: 'relative' }}>
+                                            <Mail style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} size={18} />
+                                            <input
+                                                type="email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                placeholder="Enter your email"
+                                                required
+                                                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', border: '1px solid #d1d5db', borderRadius: '12px', outline: 'none', fontSize: '1rem' }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <button type="submit" className="btn-primary" style={{ width: '100%', padding: '0.875rem', background: branding?.brand_color || '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1rem' }}>
+                                        Send Verification Code
+                                    </button>
+                                </form>
+                            ) : (
+                                <form onSubmit={handleVerifyCode}>
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
+                                            Enter Verification Code
+                                        </label>
+                                        <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1rem' }}>
+                                            Code sent to {email}
+                                        </p>
+                                        <input
+                                            type="text"
+                                            value={verificationCode}
+                                            onChange={(e) => setVerificationCode(e.target.value)}
+                                            placeholder="000000"
+                                            maxLength={6}
+                                            style={{ width: '100%', padding: '0.75rem 1rem', border: '1px solid #d1d5db', borderRadius: '12px', outline: 'none', fontSize: '1.25rem', letterSpacing: '0.25rem', textAlign: 'center' }}
+                                        />
+                                    </div>
+                                    <button type="submit" className="btn-primary" style={{ width: '100%', padding: '0.875rem', background: branding?.brand_color || '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1rem' }}>
+                                        Verify & Access
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCodeInput(false)}
+                                        style={{ width: '100%', marginTop: '1rem', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.9rem' }}
+                                    >
+                                        Change Email
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+                    )}
+
+                    {showContent && (
+                        <div className="animate-fade-in">
+                            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '1rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <Shield size={20} color="#16a34a" />
+                                <span style={{ color: '#15803d', fontSize: '0.9rem', fontWeight: '500' }}>File is secure and ready to download</span>
+                            </div>
+
+                            {document.allow_download ? (
+                                <button
+                                    onClick={handleDownload}
+                                    disabled={downloading}
+                                    className="btn-primary"
+                                    style={{ width: '100%', padding: '1rem', background: branding?.brand_color || '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', transition: 'all 0.2s' }}
+                                >
+                                    {downloading ? 'Opening...' : (
+                                        <>
+                                            <Download size={24} />
+                                            {document.storage_type === 'google_drive' ? 'Open in Google Drive' : 'Download File'}
+                                        </>
+                                    )}
+                                </button>
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '1rem', background: '#fef2f2', borderRadius: '12px', color: '#dc2626' }}>
+                                    <AlertCircle size={24} style={{ marginBottom: '0.5rem' }} />
+                                    <p>Downloads are disabled for this file.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

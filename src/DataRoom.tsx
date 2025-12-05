@@ -10,10 +10,7 @@ import {
     Copy,
     Check,
     Eye,
-    Users,
     BarChart2,
-    TrendingUp,
-    TrendingDown,
     Shield,
     Mail,
     Image as ImageIcon,
@@ -25,6 +22,8 @@ import { supabase, createClerkSupabaseClient } from './lib/supabase';
 import { encryptFile } from './lib/crypto';
 import { hashPassword } from './lib/security';
 import GoogleDriveTab from './components/GoogleDriveTab';
+import BrandingSettings from './components/BrandingSettings';
+import DashboardAnimation from './components/DashboardAnimation';
 
 interface Document {
     id: string;
@@ -43,10 +42,10 @@ interface Document {
 }
 
 const DataRoom: React.FC = () => {
-    const { getToken } = useAuth();
-    const [documents, setDocuments] = useState<Document[]>([]);
+    const { getToken, userId } = useAuth();
+    const [, setDocuments] = useState<Document[]>([]);
     const [isDragging, setIsDragging] = useState(false);
-    const [activeTab, setActiveTab] = useState<'upload' | 'google-drive' | 'documents' | 'analytics' | 'settings'>('upload');
+    const [activeTab, setActiveTab] = useState<'upload' | 'google-drive' | 'documents' | 'analytics' | 'settings' | 'branding'>('upload');
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadedDoc, setUploadedDoc] = useState<Document | null>(null);
@@ -84,62 +83,11 @@ const DataRoom: React.FC = () => {
         }
     }, [selectedFile]);
 
-    const [stats, setStats] = useState({
-        totalViews: 0,
-        uniqueViewers: 0,
-        avgViewTime: 0
-    });
+
 
     useEffect(() => {
         fetchDocuments();
-        fetchStats();
     }, []);
-
-    const fetchStats = async () => {
-        try {
-            const token = await getToken({ template: 'supabase' });
-            const authenticatedSupabase = createClerkSupabaseClient(token || '');
-
-            const { data, error } = await authenticatedSupabase
-                .from('document_stats')
-                .select('*');
-
-            if (error) throw error;
-
-            if (data) {
-                const totalViews = data.reduce((acc, curr) => acc + (curr.total_views || 0), 0);
-                const uniqueViewers = data.reduce((acc, curr) => acc + (curr.unique_viewers || 0), 0);
-
-                // Calculate weighted average for view time
-                let totalDuration = 0;
-                let totalDocsWithViews = 0;
-
-                data.forEach(doc => {
-                    if (doc.total_views > 0) {
-                        totalDuration += (doc.avg_view_time_seconds || 0) * doc.total_views;
-                        totalDocsWithViews += doc.total_views;
-                    }
-                });
-
-                const avgViewTime = totalDocsWithViews > 0 ? Math.round(totalDuration / totalDocsWithViews) : 0;
-
-                setStats({
-                    totalViews,
-                    uniqueViewers,
-                    avgViewTime
-                });
-            }
-        } catch (error) {
-            console.error('Error fetching stats:', error);
-        }
-    };
-
-    const formatDuration = (seconds: number) => {
-        if (seconds < 60) return `${seconds}s`;
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `${minutes}m ${remainingSeconds}s`;
-    };
 
     const fetchDocuments = async () => {
         try {
@@ -212,8 +160,20 @@ const DataRoom: React.FC = () => {
         setUploadError(null);
 
         try {
+            console.log('Starting upload process...');
+
             // 1. Encrypt file before upload
-            const { encryptedBlob, key, iv } = await encryptFile(selectedFile);
+            let encryptedBlob, key, iv;
+            try {
+                const result = await encryptFile(selectedFile);
+                encryptedBlob = result.encryptedBlob;
+                key = result.key;
+                iv = result.iv;
+                console.log('File encrypted successfully');
+            } catch (err) {
+                console.error('Encryption error:', err);
+                throw new Error('Failed to encrypt file. Please try again.');
+            }
 
             // 2. Upload encrypted file to Supabase Storage
             const fileExt = selectedFile.name.split('.').pop();
@@ -227,13 +187,11 @@ const DataRoom: React.FC = () => {
                 .from('documents')
                 .upload(filePath, encryptedBlob);
 
-            if (uploadError) throw uploadError;
-
-            // 3. Create public URL (for the encrypted file)
-            // Note: This URL will serve the encrypted content. The client must decrypt it.
-            // const { data: { publicUrl } } = supabase.storage
-            //    .from('documents')
-            //    .getPublicUrl(filePath);
+            if (uploadError) {
+                console.error('Storage upload error:', uploadError);
+                throw new Error(`Storage upload failed: ${uploadError.message}`);
+            }
+            console.log('File uploaded to storage successfully');
 
             const shareLink = Math.random().toString(36).substring(2, 12);
 
@@ -258,12 +216,17 @@ const DataRoom: React.FC = () => {
                     encryption_iv: iv,
                     is_encrypted: true,
                     original_file_name: selectedFile.name,
-                    original_file_type: selectedFile.type
+                    original_file_type: selectedFile.type,
+                    user_id: userId // Add user_id to associate document with user
                 })
                 .select()
                 .single();
 
-            if (dbError) throw dbError;
+            if (dbError) {
+                console.error('Database insert error:', dbError);
+                throw new Error(`Database save failed: ${dbError.message}`);
+            }
+            console.log('Document metadata saved successfully');
 
             const newDoc: Document = {
                 id: docData.id,
@@ -340,63 +303,9 @@ const DataRoom: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
-                        {/* Total Documents */}
-                        <div style={{ background: 'linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%)', borderRadius: '16px', padding: '1.5rem', border: '1px solid #dce4ff' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <FileText size={24} color="white" />
-                                </div>
-                                <span style={{ color: '#10b981', fontSize: '0.875rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                    <TrendingUp size={16} /> 12%
-                                </span>
-                            </div>
-                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>{documents.length}</div>
-                            <div style={{ color: '#6b7280', fontSize: '0.95rem', fontWeight: '500' }}>Total Documents</div>
-                        </div>
-
-                        {/* Total Views */}
-                        <div style={{ background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)', borderRadius: '16px', padding: '1.5rem', border: '1px solid #f3e8ff' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Eye size={24} color="white" />
-                                </div>
-                                <span style={{ color: '#10b981', fontSize: '0.875rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                    <TrendingUp size={16} /> 24%
-                                </span>
-                            </div>
-                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>{stats.totalViews}</div>
-                            <div style={{ color: '#6b7280', fontSize: '0.95rem', fontWeight: '500' }}>Total Views</div>
-                        </div>
-
-                        {/* Unique Viewers */}
-                        <div style={{ background: 'linear-gradient(135deg, #f0f9ff 0%, #dbeafe 100%)', borderRadius: '16px', padding: '1.5rem', border: '1px solid #dbeafe' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Users size={24} color="white" />
-                                </div>
-                                <span style={{ color: '#10b981', fontSize: '0.875rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                    <TrendingUp size={16} /> 18%
-                                </span>
-                            </div>
-                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>{stats.uniqueViewers}</div>
-                            <div style={{ color: '#6b7280', fontSize: '0.95rem', fontWeight: '500' }}>Unique Viewers</div>
-                        </div>
-
-                        {/* Avg. View Time */}
-                        <div style={{ background: 'linear-gradient(135deg, #fef3f8 0%, #fce7f3 100%)', borderRadius: '16px', padding: '1.5rem', border: '1px solid #fce7f3' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <BarChart2 size={24} color="white" />
-                                </div>
-                                <span style={{ color: '#ef4444', fontSize: '0.875rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                    <TrendingDown size={16} /> 5%
-                                </span>
-                            </div>
-                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#111827', marginBottom: '0.25rem' }}>{formatDuration(stats.avgViewTime)}</div>
-                            <div style={{ color: '#6b7280', fontSize: '0.95rem', fontWeight: '500' }}>Avg. View Time</div>
-                        </div>
+                    {/* Stats Grid / Animation */}
+                    <div style={{ marginBottom: '2rem' }}>
+                        <DashboardAnimation />
                     </div>
 
                     {/* Navigation Tabs */}
@@ -416,367 +325,379 @@ const DataRoom: React.FC = () => {
                         <button onClick={() => setActiveTab('settings')} style={{ padding: '0.625rem 1.5rem', background: activeTab === 'settings' ? '#8b5cf6' : 'transparent', color: activeTab === 'settings' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', transition: 'all 0.2s' }}>
                             <Shield size={16} /> Share Settings
                         </button>
+                        <button onClick={() => setActiveTab('branding')} style={{ padding: '0.625rem 1.5rem', background: activeTab === 'branding' ? '#8b5cf6' : 'transparent', color: activeTab === 'branding' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', transition: 'all 0.2s' }}>
+                            <ImageIcon size={16} /> Branding
+                        </button>
                     </div>
                 </div>
             </header>
 
             {/* Main Content */}
             <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem' }}>
-                {activeTab === 'google-drive' ? (
+                {activeTab === 'branding' ? (
+                    <div className="animate-fade-in">
+                        <BrandingSettings userId={userId || ''} />
+                    </div>
+                ) : activeTab === 'google-drive' ? (
                     <GoogleDriveTab onDocumentUploaded={fetchDocuments} />
+                ) : activeTab === 'analytics' ? (
+                    <div></div>
                 ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                        {/* Upload Document Section */}
-                        <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f3f4f6' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                                <Upload size={24} style={{ color: '#4f46e5' }} />
-                                <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>Upload Document</h2>
-                            </div>
-                            <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem' }}>Upload any document to generate a secure sharing link</p>
-
-                            {/* Error Display */}
-                            {uploadError && (
-                                <div style={{ padding: '1rem', background: '#fee2e2', color: '#dc2626', borderRadius: '12px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                                    <Shield size={18} />
-                                    <span>{uploadError}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                            {/* Upload Document Section */}
+                            <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f3f4f6' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                    <Upload size={24} style={{ color: '#4f46e5' }} />
+                                    <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>Upload Document</h2>
                                 </div>
-                            )}
+                                <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem' }}>Upload any document to generate a secure sharing link</p>
 
-                            {/* Upload Area */}
-                            <div
-                                onDragOver={handleDragOver}
-                                onDragLeave={handleDragLeave}
-                                onDrop={handleDrop}
-                                onClick={() => document.getElementById('file-upload')?.click()}
-                                style={{
-                                    padding: '3rem 2rem',
-                                    border: isDragging ? '2px dashed #4f46e5' : selectedFile ? '2px dashed #10b981' : '2px dashed #e5e7eb',
-                                    borderRadius: '12px',
-                                    textAlign: 'center',
-                                    cursor: 'pointer',
-                                    marginBottom: '1.5rem',
-                                    background: isDragging ? '#f0f4ff' : selectedFile ? '#f0fdf4' : '#fafbfc',
-                                    transition: 'all 0.2s'
-                                }}
-                            >
-                                {/* Icon with checkmark when file selected */}
-                                <div style={{
-                                    width: '80px',
-                                    height: '80px',
-                                    margin: '0 auto 1rem',
-                                    background: selectedFile ? '#dcfce7' : '#f3f4f6',
-                                    borderRadius: '50%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    position: 'relative',
-                                    transition: 'all 0.3s ease'
-                                }}>
-                                    {selectedFile ? (
-                                        <Check size={40} color="#10b981" strokeWidth={3} />
-                                    ) : (
-                                        <FileText size={36} color="#6b7280" />
-                                    )}
-                                </div>
-                                <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.5rem', color: selectedFile ? '#047857' : '#374151' }}>
-                                    {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
-                                </h3>
-                                <p style={{ fontSize: '0.875rem', color: selectedFile ? '#10b981' : '#9ca3af', fontWeight: selectedFile ? '500' : '400' }}>
-                                    {selectedFile ? `${(selectedFile.size / 1024).toFixed(2)} KB • Ready to upload` : 'Supports documents, images, videos, presentations, and more'}
-                                </p>
-                                {!selectedFile && (
-                                    <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>Maximum file size: 30 MB</p>
+                                {/* Error Display */}
+                                {uploadError && (
+                                    <div style={{ padding: '1rem', background: '#fee2e2', color: '#dc2626', borderRadius: '12px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+                                        <Shield size={18} />
+                                        <span>{uploadError}</span>
+                                    </div>
                                 )}
-                                <input
-                                    type="file"
-                                    onChange={handleFileInput}
-                                    id="file-upload"
-                                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
-                                    disabled={isUploading}
-                                    style={{ display: 'none' }}
-                                />
-                            </div>
 
-                            {/* Settings */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                                {/* Password Protection */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                            <Lock size={18} style={{ color: '#6b7280' }} />
-                                            <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Password Protection</span>
-                                        </div>
-                                        <label className="toggle-switch">
-                                            <input type="checkbox" checked={passwordProtection} onChange={(e) => setPasswordProtection(e.target.checked)} />
-                                            <span className="toggle-slider"></span>
-                                        </label>
+                                {/* Upload Area */}
+                                <div
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
+                                    onClick={() => document.getElementById('file-upload')?.click()}
+                                    style={{
+                                        padding: '3rem 2rem',
+                                        border: isDragging ? '2px dashed #4f46e5' : selectedFile ? '2px dashed #10b981' : '2px dashed #e5e7eb',
+                                        borderRadius: '12px',
+                                        textAlign: 'center',
+                                        cursor: 'pointer',
+                                        marginBottom: '1.5rem',
+                                        background: isDragging ? '#f0f4ff' : selectedFile ? '#f0fdf4' : '#fafbfc',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    {/* Icon with checkmark when file selected */}
+                                    <div style={{
+                                        width: '80px',
+                                        height: '80px',
+                                        margin: '0 auto 1rem',
+                                        background: selectedFile ? '#dcfce7' : '#f3f4f6',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        position: 'relative',
+                                        transition: 'all 0.3s ease'
+                                    }}>
+                                        {selectedFile ? (
+                                            <Check size={40} color="#10b981" strokeWidth={3} />
+                                        ) : (
+                                            <FileText size={36} color="#6b7280" />
+                                        )}
                                     </div>
-                                    {passwordProtection && (
-                                        <input
-                                            type="password"
-                                            placeholder="Enter password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            style={{
-                                                padding: '0.625rem 0.875rem',
-                                                border: '1px solid #e5e7eb',
-                                                borderRadius: '8px',
-                                                fontSize: '0.875rem',
-                                                outline: 'none',
-                                                marginLeft: '2rem'
-                                            }}
-                                        />
+                                    <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '0.5rem', color: selectedFile ? '#047857' : '#374151' }}>
+                                        {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
+                                    </h3>
+                                    <p style={{ fontSize: '0.875rem', color: selectedFile ? '#10b981' : '#9ca3af', fontWeight: selectedFile ? '500' : '400' }}>
+                                        {selectedFile ? `${(selectedFile.size / 1024).toFixed(2)} KB • Ready to upload` : 'Supports documents, images, videos, presentations, and more'}
+                                    </p>
+                                    {!selectedFile && (
+                                        <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>Maximum file size: 30 MB</p>
                                     )}
+                                    <input
+                                        type="file"
+                                        onChange={handleFileInput}
+                                        id="file-upload"
+                                        accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                                        disabled={isUploading}
+                                        style={{ display: 'none' }}
+                                    />
                                 </div>
 
-                                {/* Link Expiration */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                            <Calendar size={18} style={{ color: '#6b7280' }} />
-                                            <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Link Expiration</span>
+                                {/* Settings */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                                    {/* Password Protection */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                <Lock size={18} style={{ color: '#6b7280' }} />
+                                                <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Password Protection</span>
+                                            </div>
+                                            <label className="toggle-switch">
+                                                <input type="checkbox" checked={passwordProtection} onChange={(e) => setPasswordProtection(e.target.checked)} />
+                                                <span className="toggle-slider"></span>
+                                            </label>
                                         </div>
-                                        <label className="toggle-switch">
-                                            <input type="checkbox" checked={linkExpiration} onChange={(e) => setLinkExpiration(e.target.checked)} />
-                                            <span className="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    {linkExpiration && (
-                                        <input
-                                            type="date"
-                                            value={expiresAt}
-                                            onChange={(e) => setExpiresAt(e.target.value)}
-                                            min={new Date().toISOString().split('T')[0]}
-                                            style={{
-                                                padding: '0.625rem 0.875rem',
-                                                border: '1px solid #e5e7eb',
-                                                borderRadius: '8px',
-                                                fontSize: '0.875rem',
-                                                outline: 'none',
-                                                marginLeft: '2rem',
-                                                color: '#374151'
-                                            }}
-                                        />
-                                    )}
-                                </div>
-
-                                {/* Allow Downloads */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <Download size={18} style={{ color: '#6b7280' }} />
-                                        <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Allow Downloads</span>
-                                    </div>
-                                    <label className="toggle-switch">
-                                        <input type="checkbox" checked={allowDownloads} onChange={(e) => setAllowDownloads(e.target.checked)} />
-                                        <span className="toggle-slider"></span>
-                                    </label>
-                                </div>
-
-                                {/* Screenshot Protection */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <Shield size={18} style={{ color: '#6b7280' }} />
-                                        <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Screenshot Protection</span>
-                                    </div>
-                                    <label className="toggle-switch">
-                                        <input type="checkbox" checked={screenshotProtection} onChange={(e) => setScreenshotProtection(e.target.checked)} />
-                                        <span className="toggle-slider"></span>
-                                    </label>
-                                </div>
-
-                                {/* Email Verification */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                            <Mail size={18} style={{ color: '#6b7280' }} />
-                                            <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Require Email Verification</span>
-                                        </div>
-                                        <label className="toggle-switch">
-                                            <input type="checkbox" checked={emailVerification} onChange={(e) => setEmailVerification(e.target.checked)} />
-                                            <span className="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    {emailVerification && (
-                                        <input
-                                            type="email"
-                                            placeholder="Enter recipient email (optional)"
-                                            value={allowedEmail}
-                                            onChange={(e) => setAllowedEmail(e.target.value)}
-                                            style={{
-                                                padding: '0.625rem 0.875rem',
-                                                border: '1px solid #e5e7eb',
-                                                borderRadius: '8px',
-                                                fontSize: '0.875rem',
-                                                outline: 'none',
-                                                marginLeft: '2rem'
-                                            }}
-                                        />
-                                    )}
-                                </div>
-
-                                {/* Watermark */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <ImageIcon size={18} style={{ color: '#6b7280' }} />
-                                        <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Apply Watermark</span>
-                                    </div>
-                                    <label className="toggle-switch">
-                                        <input type="checkbox" checked={applyWatermark} onChange={(e) => setApplyWatermark(e.target.checked)} />
-                                        <span className="toggle-slider"></span>
-                                    </label>
-                                </div>
-
-                                {/* E-Signature */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <PenTool size={18} style={{ color: '#6b7280' }} />
-                                        <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Request E-Signature</span>
-                                    </div>
-                                    <label className="toggle-switch">
-                                        <input type="checkbox" checked={requestSignature} onChange={(e) => setRequestSignature(e.target.checked)} />
-                                        <span className="toggle-slider"></span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            {/* Upload Button */}
-                            <button
-                                onClick={handleUpload}
-                                disabled={!selectedFile || isUploading}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.875rem',
-                                    background: !selectedFile || isUploading ? '#9ca3af' : '#6366f1',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '10px',
-                                    fontWeight: '600',
-                                    fontSize: '0.95rem',
-                                    cursor: !selectedFile || isUploading ? 'not-allowed' : 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem'
-                                }}
-                            >
-                                {isUploading ? 'Generating Link...' : (
-                                    <>
-                                        <LinkIcon size={18} />
-                                        Generate Secure Link
-                                    </>
-                                )}
-                            </button>
-                        </div>
-
-                        {/* Sharing Link Section */}
-                        <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                                <LinkIcon size={24} style={{ color: '#3b82f6' }} />
-                                <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>Sharing Link</h2>
-                            </div>
-                            <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '2rem' }}>Your secure, trackable document link</p>
-
-                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '1.5rem', minHeight: '400px' }}>
-                                {uploadedDoc ? (
-                                    <>
-                                        <div style={{ width: '100px', height: '100px', background: '#e0e7ff', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            <LinkIcon size={48} color="#4f46e5" />
-                                        </div>
-                                        <div style={{ textAlign: 'center' }}>
-                                            <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem', color: '#111827' }}>{uploadedDoc.name}</h3>
-                                            <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>{uploadedDoc.size} • Ready to share</p>
-                                        </div>
-                                        <div style={{ width: '100%', padding: '1rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        {passwordProtection && (
                                             <input
-                                                type="text"
-                                                value={uploadedDoc.link}
-                                                readOnly
-                                                style={{ fontSize: '0.875rem', flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#6b7280' }}
+                                                type="password"
+                                                placeholder="Enter password"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                style={{
+                                                    padding: '0.625rem 0.875rem',
+                                                    border: '1px solid #e5e7eb',
+                                                    borderRadius: '8px',
+                                                    fontSize: '0.875rem',
+                                                    outline: 'none',
+                                                    marginLeft: '2rem'
+                                                }}
                                             />
-                                            <button
-                                                onClick={() => copyLink(uploadedDoc.link)}
-                                                style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                                            >
-                                                {copiedId === 'link' ? <Check size={18} color="#16a34a" /> : <Copy size={18} color="#6b7280" />}
-                                            </button>
-                                        </div>
-
-                                        {/* Preview Button */}
-                                        <button
-                                            onClick={handlePreview}
-                                            style={{
-                                                width: '100%',
-                                                padding: '0.75rem',
-                                                background: '#f9fafb',
-                                                border: '1px solid #e5e7eb',
-                                                borderRadius: '10px',
-                                                color: '#374151',
-                                                fontWeight: '600',
-                                                fontSize: '0.9rem',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '0.5rem',
-                                                transition: 'all 0.2s'
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
-                                            onMouseLeave={(e) => e.currentTarget.style.background = '#f9fafb'}
-                                        >
-                                            <Eye size={18} />
-                                            Preview Document
-                                        </button>
-                                    </>
-                                ) : selectedFile && filePreview ? (
-                                    <>
-                                        <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
-                                            <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem', color: '#111827' }}>File Preview</h3>
-                                            <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>{selectedFile.name} • {(selectedFile.size / 1024).toFixed(2)} KB</p>
-                                        </div>
-
-                                        {/* Preview Container */}
-                                        <div style={{ width: '100%', maxHeight: '350px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '1rem', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {selectedFile.type.startsWith('image/') ? (
-                                                <img
-                                                    src={filePreview}
-                                                    alt="Preview"
-                                                    style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px' }}
-                                                />
-                                            ) : selectedFile.type === 'application/pdf' ? (
-                                                <iframe
-                                                    src={filePreview}
-                                                    style={{ width: '100%', height: '300px', border: 'none', borderRadius: '8px' }}
-                                                    title="PDF Preview"
-                                                />
-                                            ) : selectedFile.type === 'text/plain' ? (
-                                                <iframe
-                                                    src={filePreview}
-                                                    style={{ width: '100%', height: '300px', border: 'none', borderRadius: '8px', background: 'white' }}
-                                                    title="Text Preview"
-                                                />
-                                            ) : (
-                                                <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                                                    <FileText size={64} color="#9ca3af" style={{ marginBottom: '1rem' }} />
-                                                    <p style={{ fontSize: '0.875rem' }}>Preview not available for this file type</p>
-                                                    <p style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#9ca3af' }}>{selectedFile.type || 'Unknown type'}</p>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div style={{ width: '100%', textAlign: 'center' }}>
-                                            <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>
-                                                Click "Generate Secure Link" to upload and create a shareable link
-                                            </p>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div style={{ textAlign: 'center', color: '#9ca3af' }}>
-                                        <LinkIcon size={64} style={{ marginBottom: '1rem', color: '#e5e7eb' }} />
-                                        <p style={{ maxWidth: '300px', margin: '0 auto' }}>Upload a document and click "Generate Secure Link" to create a shareable link</p>
+                                        )}
                                     </div>
-                                )}
+
+                                    {/* Link Expiration */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                <Calendar size={18} style={{ color: '#6b7280' }} />
+                                                <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Link Expiration</span>
+                                            </div>
+                                            <label className="toggle-switch">
+                                                <input type="checkbox" checked={linkExpiration} onChange={(e) => setLinkExpiration(e.target.checked)} />
+                                                <span className="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        {linkExpiration && (
+                                            <input
+                                                type="date"
+                                                value={expiresAt}
+                                                onChange={(e) => setExpiresAt(e.target.value)}
+                                                min={new Date().toISOString().split('T')[0]}
+                                                style={{
+                                                    padding: '0.625rem 0.875rem',
+                                                    border: '1px solid #e5e7eb',
+                                                    borderRadius: '8px',
+                                                    fontSize: '0.875rem',
+                                                    outline: 'none',
+                                                    marginLeft: '2rem',
+                                                    color: '#374151'
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+
+                                    {/* Allow Downloads */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            <Download size={18} style={{ color: '#6b7280' }} />
+                                            <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Allow Downloads</span>
+                                        </div>
+                                        <label className="toggle-switch">
+                                            <input type="checkbox" checked={allowDownloads} onChange={(e) => setAllowDownloads(e.target.checked)} />
+                                            <span className="toggle-slider"></span>
+                                        </label>
+                                    </div>
+
+                                    {/* Screenshot Protection */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            <Shield size={18} style={{ color: '#6b7280' }} />
+                                            <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Screenshot Protection</span>
+                                        </div>
+                                        <label className="toggle-switch">
+                                            <input type="checkbox" checked={screenshotProtection} onChange={(e) => setScreenshotProtection(e.target.checked)} />
+                                            <span className="toggle-slider"></span>
+                                        </label>
+                                    </div>
+
+                                    {/* Email Verification */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                <Mail size={18} style={{ color: '#6b7280' }} />
+                                                <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Require Email Verification</span>
+                                            </div>
+                                            <label className="toggle-switch">
+                                                <input type="checkbox" checked={emailVerification} onChange={(e) => setEmailVerification(e.target.checked)} />
+                                                <span className="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        {emailVerification && (
+                                            <input
+                                                type="email"
+                                                placeholder="Enter recipient email (optional)"
+                                                value={allowedEmail}
+                                                onChange={(e) => setAllowedEmail(e.target.value)}
+                                                style={{
+                                                    padding: '0.625rem 0.875rem',
+                                                    border: '1px solid #e5e7eb',
+                                                    borderRadius: '8px',
+                                                    fontSize: '0.875rem',
+                                                    outline: 'none',
+                                                    marginLeft: '2rem'
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+
+                                    {/* Watermark */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            <ImageIcon size={18} style={{ color: '#6b7280' }} />
+                                            <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Apply Watermark</span>
+                                        </div>
+                                        <label className="toggle-switch">
+                                            <input type="checkbox" checked={applyWatermark} onChange={(e) => setApplyWatermark(e.target.checked)} />
+                                            <span className="toggle-slider"></span>
+                                        </label>
+                                    </div>
+
+                                    {/* E-Signature */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            <PenTool size={18} style={{ color: '#6b7280' }} />
+                                            <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#374151' }}>Request E-Signature</span>
+                                        </div>
+                                        <label className="toggle-switch">
+                                            <input type="checkbox" checked={requestSignature} onChange={(e) => setRequestSignature(e.target.checked)} />
+                                            <span className="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Upload Button */}
+                                <button
+                                    onClick={handleUpload}
+                                    disabled={!selectedFile || isUploading}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.875rem',
+                                        background: !selectedFile || isUploading ? '#9ca3af' : '#6366f1',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '10px',
+                                        fontWeight: '600',
+                                        fontSize: '0.95rem',
+                                        cursor: !selectedFile || isUploading ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '0.5rem'
+                                    }}
+                                >
+                                    {isUploading ? 'Generating Link...' : (
+                                        <>
+                                            <LinkIcon size={18} />
+                                            Generate Secure Link
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* Sharing Link Section */}
+                            <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                    <LinkIcon size={24} style={{ color: '#3b82f6' }} />
+                                    <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>Sharing Link</h2>
+                                </div>
+                                <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '2rem' }}>Your secure, trackable document link</p>
+
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '1.5rem', minHeight: '400px' }}>
+                                    {uploadedDoc ? (
+                                        <>
+                                            <div style={{ width: '100px', height: '100px', background: '#e0e7ff', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <LinkIcon size={48} color="#4f46e5" />
+                                            </div>
+                                            <div style={{ textAlign: 'center' }}>
+                                                <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem', color: '#111827' }}>{uploadedDoc.name}</h3>
+                                                <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>{uploadedDoc.size} • Ready to share</p>
+                                            </div>
+                                            <div style={{ width: '100%', padding: '1rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                <input
+                                                    type="text"
+                                                    value={uploadedDoc.link}
+                                                    readOnly
+                                                    style={{ fontSize: '0.875rem', flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#6b7280' }}
+                                                />
+                                                <button
+                                                    onClick={() => copyLink(uploadedDoc.link)}
+                                                    style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                                >
+                                                    {copiedId === 'link' ? <Check size={18} color="#16a34a" /> : <Copy size={18} color="#6b7280" />}
+                                                </button>
+                                            </div>
+
+                                            {/* Preview Button */}
+                                            <button
+                                                onClick={handlePreview}
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '0.75rem',
+                                                    background: '#f9fafb',
+                                                    border: '1px solid #e5e7eb',
+                                                    borderRadius: '10px',
+                                                    color: '#374151',
+                                                    fontWeight: '600',
+                                                    fontSize: '0.9rem',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '0.5rem',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                                                onMouseLeave={(e) => e.currentTarget.style.background = '#f9fafb'}
+                                            >
+                                                <Eye size={18} />
+                                                Preview Document
+                                            </button>
+                                        </>
+                                    ) : selectedFile && filePreview ? (
+                                        <>
+                                            <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
+                                                <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem', color: '#111827' }}>File Preview</h3>
+                                                <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>{selectedFile.name} • {(selectedFile.size / 1024).toFixed(2)} KB</p>
+                                            </div>
+
+                                            {/* Preview Container */}
+                                            <div style={{ width: '100%', maxHeight: '350px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '1rem', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {selectedFile.type.startsWith('image/') ? (
+                                                    <img
+                                                        src={filePreview}
+                                                        alt="Preview"
+                                                        style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px' }}
+                                                    />
+                                                ) : selectedFile.type === 'application/pdf' ? (
+                                                    <iframe
+                                                        src={filePreview}
+                                                        style={{ width: '100%', height: '300px', border: 'none', borderRadius: '8px' }}
+                                                        title="PDF Preview"
+                                                    />
+                                                ) : selectedFile.type === 'text/plain' ? (
+                                                    <iframe
+                                                        src={filePreview}
+                                                        style={{ width: '100%', height: '300px', border: 'none', borderRadius: '8px', background: 'white' }}
+                                                        title="Text Preview"
+                                                    />
+                                                ) : (
+                                                    <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                                        <FileText size={64} color="#9ca3af" style={{ marginBottom: '1rem' }} />
+                                                        <p style={{ fontSize: '0.875rem' }}>Preview not available for this file type</p>
+                                                        <p style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#9ca3af' }}>{selectedFile.type || 'Unknown type'}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div style={{ width: '100%', textAlign: 'center' }}>
+                                                <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>
+                                                    Click "Generate Secure Link" to upload and create a shareable link
+                                                </p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div style={{ textAlign: 'center', color: '#9ca3af' }}>
+                                            <LinkIcon size={64} style={{ marginBottom: '1rem', color: '#e5e7eb' }} />
+                                            <p style={{ maxWidth: '300px', margin: '0 auto' }}>Upload a document and click "Generate Secure Link" to create a shareable link</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
+
                     </div>
                 )}
             </main>
